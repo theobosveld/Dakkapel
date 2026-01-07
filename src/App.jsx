@@ -1,21 +1,25 @@
 import React, { useState, useRef, forwardRef } from 'react';
-import { Download, Plus, Trash2, AlertTriangle, FileImage, X, FileText, Euro, Printer } from 'lucide-react';
+import { Download, Plus, Trash2, AlertTriangle, FileImage, X, FileText, Euro, Printer, User, Wrench, Layout, CheckSquare } from 'lucide-react';
 
-// --- PRIJZEN CONFIGURATIE (Dummy prijzen voor voorbeeld) ---
+// --- PRIJZEN CONFIGURATIE (Gebaseerd op PDF documentatie) ---
 const PRIJZEN = {
-  basisPerMeter: 1250, // Prijs per meter breedte (casco)
-  startTarief: 1500,   // Vaste kosten (zijwangen, constructie, plaatsing)
+  basisPerMeter: 1350, // Geupdate basisprijs
+  startTarief: 1500,
   types: {
-    draai: 350,       // Meerprijs t.o.v. basis
+    draai: 350,
     kiep: 400,
     kiepdraai: 550,
     vast: 150,
     dicht: 0
   },
   opties: {
-    rooster: 125,
-    rolluik: 695,
-    hor: 145
+    rooster: 150, // Bron: PDF Page 6
+    rolluik: 750, // Schatting obv "Prijs op aanvraag"
+    hor: 115,     // Bron: PDF Page 11 (3 stuks 345 -> 115 p/s)
+    keralitUpgrade: 650, // Bron: PDF Page 6 (per dakkapel)
+    afvoerenSloop: 680,  // Bron: PDF Page 6
+    afvoerenPannen: 195, // Bron: PDF Page 6
+    constructieVerzwaren: 200 // Bron: PDF Page 6 (tbv zonnepanelen)
   }
 };
 
@@ -88,8 +92,6 @@ const SectieTekening = ({ x, y, breedte, hoogte, kozijnDikte, type, draairichtin
           <rect x={glassX} y={glassY - ventHeight} width={glassW} height={ventHeight}
                 fill={CONFIG.colors.vent} stroke={CONFIG.colors.stroke} strokeWidth="1" />
           <line x1={glassX + 10} y1={glassY - ventHeight/2} x2={glassX + glassW - 10} y2={glassY - ventHeight/2} stroke="#999" strokeWidth="1" />
-          <line x1={glassX + 10} y1={glassY - ventHeight/3} x2={glassX + glassW - 10} y2={glassY - ventHeight/3} stroke="#999" strokeWidth="1" />
-          <line x1={glassX + 10} y1={glassY - (ventHeight/3)*2} x2={glassX + glassW - 10} y2={glassY - (ventHeight/3)*2} stroke="#999" strokeWidth="1" />
         </g>
       )}
 
@@ -221,6 +223,57 @@ DakkapelTekening.displayName = 'DakkapelTekening';
 // --- HOOFD APPLICATIE ---
 export default function DakkapelDesigner() {
   const svgRef = useRef(null);
+  const [activeTab, setActiveTab] = useState('ontwerp'); // ontwerp, materialen, gegevens
+
+  // Staat voor Formulier velden (Gebaseerd op PDF Page 1)
+  const [clientData, setClientData] = useState({
+    datum: new Date().toISOString().split('T')[0],
+    naam: '',
+    straat: '',
+    postcode: '',
+    plaats: '',
+    telefoon: '',
+    mobiel: '',
+    email: '',
+    geboortedatum: ''
+  });
+
+  const [situationData, setSituationData] = useState({
+    bouwdepot: 'Nee',
+    plaatsVoordeur: 'Rechts',
+    serre: 'Nee',
+    radiatoren: 'Nee',
+    rookkanaal: 'Nee',
+    schoorsteen: 'Nee',
+    binnenkantSlopen: 'Nee',
+    sloopOudeDakkapel: 'Nee',
+    grintOpDak: 'Nee',
+    bereikbaarheidKraan: 'Ja',
+    vanuitNok: 'Nee',
+    vanuitGoot: 'Nee',
+    busroute: 'Nee',
+    zonnepanelen: 'Nee',
+    vergunningNodig: 'Ja',
+    bsnNummer: '',
+    diepteWoning: '',
+    hoogteBeganeGrond: '',
+    hoogteEersteVerdieping: '',
+    hoogteNok: ''
+  });
+
+  const [materialData, setMaterialData] = useState({
+    materiaal: 'Kunststof', // Kunststof, Aluminium, Hout
+    kleur: 'Wit',
+    kozijnProfiel: 'Verdiept', // Verdiept, Vlak
+    kozijnKleur: 'Houtnerf', // Houtnerf, Glad
+    zijwangen: 'Trespa', // Trespa, Keralit, Zink, Lood
+    boeideel: 'Trespa', // Trespa, Keralit
+    daktrim: 'Aluminium', // Aluminium, Kraal
+    dakbedekking: 'Bitumen', // Bitumen, EPDM
+    kleurZijwangen: 'Antraciet (RAL 7016)',
+    kleurBoeideel: 'Antraciet (RAL 7016)',
+    kleurDraaikiep: 'Wit (RAL 9016)'
+  });
 
   const [maten, setMaten] = useState({
     totaalBreedte: 3570,
@@ -230,7 +283,8 @@ export default function DakkapelDesigner() {
     dorpelHoogte: 300, 
     overhangLinks: 100,
     overhangRechts: 100,
-    kozijnDikte: 60
+    kozijnDikte: 60,
+    dakhelling: 45
   });
 
   const [secties, setSecties] = useState([
@@ -263,6 +317,17 @@ export default function DakkapelDesigner() {
       if (sectie.hor) totaal += PRIJZEN.opties.hor;
     });
 
+    // 4. Materiaal & Situatie opslagen (Gebaseerd op PDF Page 6)
+    if (materialData.zijwangen === 'Keralit' || materialData.boeideel === 'Keralit') {
+        totaal += PRIJZEN.opties.keralitUpgrade;
+    }
+    if (situationData.sloopOudeDakkapel === 'Ja') {
+        totaal += PRIJZEN.opties.afvoerenSloop; // + evt sloopkosten zelf (niet gespecificeerd in var, nemen we samen)
+    }
+    if (situationData.zonnepanelen === 'Ja') {
+        totaal += PRIJZEN.opties.constructieVerzwaren;
+    }
+
     return totaal;
   };
 
@@ -272,6 +337,18 @@ export default function DakkapelDesigner() {
   // --- HANDLERS ---
   const handleMaatChange = (key, value) => {
     setMaten(prev => ({ ...prev, [key]: parseFloat(value) || 0 }));
+  };
+
+  const handleClientChange = (key, value) => {
+    setClientData(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSituationChange = (key, value) => {
+    setSituationData(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleMaterialChange = (key, value) => {
+    setMaterialData(prev => ({ ...prev, [key]: value }));
   };
 
   const handleSectieChange = (index, key, value) => {
@@ -324,13 +401,13 @@ export default function DakkapelDesigner() {
        const blob = new Blob([svgData], { type: 'image/svg+xml' });
        const url = URL.createObjectURL(blob);
        const link = document.createElement('a');
-       link.href = url; link.download = `dakkapel-${Date.now()}.svg`; link.click();
+       link.href = url; link.download = `dakkapel-${clientData.naam || 'ontwerp'}.svg`; link.click();
        URL.revokeObjectURL(url);
     } else if (format === 'png') {
        const imgData = await getSvgAsImage();
        if(imgData) {
          const link = document.createElement('a');
-         link.download = `dakkapel-${Date.now()}.png`;
+         link.download = `dakkapel-${clientData.naam || 'ontwerp'}.png`;
          link.href = imgData; link.click();
        }
     }
@@ -339,117 +416,166 @@ export default function DakkapelDesigner() {
   const handleDownloadOfferteHTML = async () => {
     const imgData = await getSvgAsImage();
     
-    // Bereken totalen voor opties (ter informatie)
-    let totalOpties = 0;
-    secties.forEach(s => {
-       if (s.rooster) totalOpties += PRIJZEN.opties.rooster;
-       if (s.rolluik) totalOpties += PRIJZEN.opties.rolluik;
-       if (s.hor) totalOpties += PRIJZEN.opties.hor;
-    });
-    
+    // Genereer HTML gebaseerd op PDF structuur
     const htmlContent = `
       <!DOCTYPE html>
       <html lang="nl">
       <head>
         <meta charset="UTF-8">
-        <title>Offerte Dakkapel</title>
+        <title>Offerte ${clientData.naam}</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
-          body { font-family: sans-serif; -webkit-print-color-adjust: exact; }
+          body { font-family: 'Helvetica', 'Arial', sans-serif; -webkit-print-color-adjust: exact; font-size: 12px; }
+          .table-header { background-color: #f3f4f6; font-weight: bold; border-bottom: 2px solid #000; }
+          .section-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px; color: #1e3a8a; }
           @media print { .no-print { display: none; } }
         </style>
       </head>
       <body class="bg-gray-100 p-8">
-        <div class="max-w-4xl mx-auto bg-white p-8 shadow-lg">
-          <div class="flex justify-between items-center border-b pb-6 mb-6">
-            <div>
-              <h1 class="text-3xl font-bold text-gray-900">Offerte Dakkapel</h1>
-              <p class="text-gray-500">Datum: ${new Date().toLocaleDateString('nl-NL')}</p>
+        <div class="max-w-5xl mx-auto bg-white p-12 shadow-lg print:shadow-none print:p-0">
+          
+          <!-- HEADER (Page 1 Style) -->
+          <div class="flex justify-between items-start mb-8">
+            <div class="w-1/2">
+                <h1 class="text-3xl font-bold text-gray-900 uppercase">Zolderverbouw Larenstein</h1>
+                <p class="text-gray-500 italic">Voor úw complete zolderverbouwing</p>
+                <div class="mt-4 text-sm">
+                    P.C. Staalweg 10<br>
+                    3721 TJ Bilthoven<br>
+                    Tel: 030-272 06 42<br>
+                    info@zolderverbouwlarenstein.nl
+                </div>
             </div>
-            <div class="text-right">
-              <div class="text-sm text-gray-500">Offerte kenmerk</div>
-              <div class="font-mono font-bold text-lg">#${Math.floor(Math.random() * 10000)}</div>
+            <div class="w-1/2 text-right">
+                <div class="border p-4 inline-block text-left bg-gray-50 text-sm">
+                    <strong>Offertenummer:</strong> 2025-${Math.floor(Math.random() * 1000)}<br>
+                    <strong>Datum:</strong> ${clientData.datum}<br>
+                    <strong>Klant:</strong> ${clientData.naam}<br>
+                    <strong>Plaats:</strong> ${clientData.plaats}
+                </div>
             </div>
           </div>
 
+          <!-- CLIENT DATA TABLE (Based on Page 1 form) -->
           <div class="mb-8">
-            <h2 class="text-xl font-bold mb-4 text-blue-600">Technisch Ontwerp</h2>
-            <div class="border rounded-lg p-4 flex justify-center bg-gray-50">
-              <img src="${imgData}" style="max-height: 400px; width: auto;" />
+            <h2 class="section-title">Klantgegevens & Locatie</h2>
+            <div class="grid grid-cols-2 gap-4">
+               <div>
+                  <table class="w-full text-sm">
+                    <tr><td class="w-32 font-bold">Naam:</td><td>${clientData.naam}</td></tr>
+                    <tr><td class="font-bold">Adres:</td><td>${clientData.straat}</td></tr>
+                    <tr><td class="font-bold">Postcode/Plaats:</td><td>${clientData.postcode} ${clientData.plaats}</td></tr>
+                    <tr><td class="font-bold">Telefoon:</td><td>${clientData.telefoon}</td></tr>
+                  </table>
+               </div>
+               <div>
+                  <table class="w-full text-sm">
+                    <tr><td class="w-32 font-bold">E-mail:</td><td>${clientData.email}</td></tr>
+                    <tr><td class="font-bold">Geboortedatum:</td><td>${clientData.geboortedatum}</td></tr>
+                    <tr><td class="font-bold">Datum Opname:</td><td>${clientData.datum}</td></tr>
+                  </table>
+               </div>
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-8 mb-8">
-            <div>
-              <h3 class="font-bold border-b pb-2 mb-2">Afmetingen</h3>
-              <div class="grid grid-cols-2 gap-2 text-sm">
-                <div class="text-gray-600">Breedte:</div><div>${maten.totaalBreedte} mm</div>
-                <div class="text-gray-600">Hoogte:</div><div>${maten.totaalHoogte} mm</div>
-                <div class="text-gray-600">Zijwangen:</div><div>${maten.zijpaneelBreedte} mm</div>
-                <div class="text-gray-600">Boeideel:</div><div>${maten.bovenpaneelHoogte} mm</div>
-              </div>
-            </div>
-            <div>
-              <h3 class="font-bold border-b pb-2 mb-2">Specificaties</h3>
-              <div class="text-sm text-gray-600">
-                Materiaal: Kunststof (HPL)<br>
-                Kleur: Wit (RAL 9016)<br>
-                Glas: HR++ Isolatieglas<br>
-                RC-waarde: 6.0
-              </div>
-            </div>
-          </div>
-
+          <!-- MATERIAL SPECIFICATION (Based on Page 1 & 5) -->
           <div class="mb-8">
-            <h3 class="font-bold mb-4">Samenstelling</h3>
-            <table class="w-full text-sm text-left">
-              <thead class="bg-gray-50 text-gray-700">
+            <h2 class="section-title">Materialen & Uitvoering</h2>
+            <table class="w-full border-collapse border border-gray-300 text-sm">
+                <tr class="bg-gray-100"><th class="border p-2 text-left" colspan="4">Specificaties</th></tr>
                 <tr>
-                  <th class="p-2 border-b">Positie</th>
-                  <th class="p-2 border-b">Type</th>
-                  <th class="p-2 border-b">Afmeting</th>
-                  <th class="p-2 border-b">Opties</th>
-                  <th class="p-2 border-b text-right">Prijs</th>
+                    <td class="border p-2 font-bold w-1/4">Materiaal Dakkapel</td><td class="border p-2 w-1/4">${materialData.materiaal}</td>
+                    <td class="border p-2 font-bold w-1/4">Kleur Kozijn</td><td class="border p-2 w-1/4">${materialData.kleur} (${materialData.kozijnKleur})</td>
                 </tr>
-              </thead>
-              <tbody>
-                ${secties.map((sectie, idx) => {
-                  let prijs = (PRIJZEN.types[sectie.type] || 0);
-                  if (sectie.rooster) prijs += PRIJZEN.opties.rooster;
-                  if (sectie.rolluik) prijs += PRIJZEN.opties.rolluik;
-                  if (sectie.hor) prijs += PRIJZEN.opties.hor;
-                  
-                  let opts = [];
-                  if (sectie.rooster) opts.push("Rooster");
-                  if (sectie.rolluik) opts.push("Rolluik");
-                  if (sectie.hor) opts.push("Hor");
-                  
-                  return `
-                    <tr class="border-b last:border-0">
-                      <td class="p-2">Sectie ${idx + 1}</td>
-                      <td class="p-2 capitalize">${sectie.type}</td>
-                      <td class="p-2">${sectie.breedte} mm</td>
-                      <td class="p-2 text-gray-500">${opts.join(', ') || '-'}</td>
-                      <td class="p-2 text-right">€ ${prijs.toLocaleString('nl-NL', {minimumFractionDigits: 2})}</td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
+                <tr>
+                    <td class="border p-2 font-bold">Zijwangen</td><td class="border p-2">${materialData.zijwangen} (${materialData.kleurZijwangen})</td>
+                    <td class="border p-2 font-bold">Draaikiepramen</td><td class="border p-2">${materialData.kleurDraaikiep}</td>
+                </tr>
+                 <tr>
+                    <td class="border p-2 font-bold">Boeideel</td><td class="border p-2">${materialData.boeideel} (${materialData.kleurBoeideel})</td>
+                    <td class="border p-2 font-bold">Daktrim</td><td class="border p-2">${materialData.daktrim}</td>
+                </tr>
+                <tr>
+                    <td class="border p-2 font-bold">Dakbedekking</td><td class="border p-2">${materialData.dakbedekking}</td>
+                    <td class="border p-2 font-bold">Hellingshoek</td><td class="border p-2">${maten.dakhelling} graden</td>
+                </tr>
             </table>
           </div>
 
-          <div class="flex justify-end border-t-2 border-gray-900 pt-4">
-            <div class="text-right">
-              <div class="text-2xl font-bold text-blue-600">
-                Totaal: € ${totaalPrijs.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
-              </div>
-              <div class="text-xs text-gray-500 mt-1">Inclusief BTW & Montage</div>
+          <!-- CHECKLIST (Based on Page 1 "Algemene Informatie") -->
+          <div class="mb-8 break-inside-avoid">
+            <h2 class="section-title">Situatie & Checklist</h2>
+            <div class="grid grid-cols-3 gap-2 text-xs border p-2 rounded">
+                ${Object.entries(situationData).map(([key, value]) => {
+                    if(['bsnNummer', 'diepteWoning', 'hoogteBeganeGrond', 'hoogteEersteVerdieping', 'hoogteNok'].includes(key)) return '';
+                    return `<div class="flex justify-between border-b py-1"><span>${key.replace(/([A-Z])/g, ' $1').toLowerCase()}:</span> <strong>${value}</strong></div>`;
+                }).join('')}
             </div>
+          </div>
+
+          <!-- TECHNISCHE TEKENING -->
+          <div class="mb-8 break-inside-avoid">
+            <h2 class="section-title">Technisch Aanzicht</h2>
+            <div class="border rounded-lg p-4 flex justify-center bg-gray-50">
+              <img src="${imgData}" style="max-height: 350px; width: auto;" />
+            </div>
+            <div class="text-xs text-center mt-2 text-gray-500">
+               Breedte: ${maten.totaalBreedte}mm | Hoogte: ${maten.totaalHoogte}mm
+            </div>
+          </div>
+
+          <!-- PRIJSOPGAVE (Based on Page 6) -->
+          <div class="mb-8">
+            <h2 class="section-title">Prijsopgave</h2>
+            <table class="w-full text-sm text-left border-collapse">
+              <thead class="bg-gray-100 border-b-2 border-gray-800">
+                <tr>
+                  <th class="p-2">Omschrijving</th>
+                  <th class="p-2 text-right">Bedrag</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-b">
+                    <td class="p-2">Basis Dakkapel (Afm: ${maten.totaalBreedte}x${maten.totaalHoogte}) inclusief plaatsing en constructie</td>
+                    <td class="p-2 text-right">€ ${(maten.totaalBreedte / 1000 * PRIJZEN.basisPerMeter + PRIJZEN.startTarief).toLocaleString('nl-NL', {minimumFractionDigits: 2})}</td>
+                </tr>
+                ${secties.map((sectie, idx) => {
+                  let subTotaal = (PRIJZEN.types[sectie.type] || 0);
+                  let desc = `Sectie ${idx+1}: ${sectie.type}`;
+                  if (sectie.rooster) { subTotaal += PRIJZEN.opties.rooster; desc += " + rooster"; }
+                  if (sectie.rolluik) { subTotaal += PRIJZEN.opties.rolluik; desc += " + rolluik"; }
+                  if (sectie.hor) { subTotaal += PRIJZEN.opties.hor; desc += " + hor"; }
+                  
+                  if(subTotaal > 0) {
+                      return `
+                        <tr class="border-b">
+                          <td class="p-2 pl-6 text-gray-600">${desc}</td>
+                          <td class="p-2 text-right">€ ${subTotaal.toLocaleString('nl-NL', {minimumFractionDigits: 2})}</td>
+                        </tr>`;
+                  }
+                  return '';
+                }).join('')}
+
+                ${materialData.zijwangen === 'Keralit' ? `<tr class="border-b"><td class="p-2">Meerprijs Keralit bekleding</td><td class="p-2 text-right">€ ${PRIJZEN.opties.keralitUpgrade.toLocaleString('nl-NL', {minimumFractionDigits:2})}</td></tr>` : ''}
+                ${situationData.sloopOudeDakkapel === 'Ja' ? `<tr class="border-b"><td class="p-2">Afvoeren sloopmateriaal & pannen</td><td class="p-2 text-right">€ ${(PRIJZEN.opties.afvoerenSloop + PRIJZEN.opties.afvoerenPannen).toLocaleString('nl-NL', {minimumFractionDigits:2})}</td></tr>` : ''}
+              </tbody>
+              <tfoot>
+                <tr class="font-bold text-lg bg-gray-50">
+                    <td class="p-2 text-right border-t-2 border-black">Totaal (inclusief 21% BTW):</td>
+                    <td class="p-2 text-right border-t-2 border-black">€ ${totaalPrijs.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="text-xs text-gray-500 mt-8 border-t pt-4">
+             <p>Op al onze overeenkomsten zijn de algemene voorwaarden van toepassing. Betaling 100% op dag van plaatsing.</p>
+             <p>Garanties: 15 jaar constructie, 10 jaar kozijnen, 10 jaar dakbedekking.</p>
           </div>
           
           <div class="mt-12 text-center no-print">
             <button onclick="window.print()" class="bg-blue-600 text-white px-6 py-3 rounded font-bold hover:bg-blue-700 transition cursor-pointer">
-              Print / Opslaan als PDF
+              Opslaan als PDF
             </button>
           </div>
         </div>
@@ -461,105 +587,28 @@ export default function DakkapelDesigner() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Offerte-Dakkapel-${Date.now()}.html`;
+    link.download = `Offerte-${clientData.naam.replace(/\s+/g, '-') || 'Concept'}.html`;
     link.click();
     URL.revokeObjectURL(url);
   };
 
-  // --- NATIVE PRINT FUNCTIE ---
   const handlePrint = () => {
     window.print();
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 lg:p-8 font-sans print:bg-white print:p-0">
+    <div className="min-h-screen bg-gray-100 p-2 lg:p-6 font-sans print:bg-white print:p-0">
       
-      {/* PRINT STYLES - Alleen zichtbaar tijdens printen */}
-      <style>{`
-        @media print {
-          @page { size: landscape; margin: 1cm; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .no-print { display: none !important; }
-          .print-only { display: block !important; }
-          .print-layout { display: block !important; width: 100%; }
-          .print-header { margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-        }
-        .print-only { display: none; }
-      `}</style>
-
-      {/* PRINTBARE OFFERTE PAGINA (Zichtbaar op print) */}
-      <div className="print-only">
-        <div className="print-header flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold">Offerte Dakkapel</h1>
-            <p className="text-gray-600">Datum: {new Date().toLocaleDateString('nl-NL')}</p>
-          </div>
-          <div className="text-right">
-            <h2 className="text-xl font-bold">Totaalprijs: € {totaalPrijs.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}</h2>
-            <p className="text-sm text-gray-500">Incl. BTW & Montage</p>
-          </div>
-        </div>
-
-        {/* Tekening in print */}
-        <div className="border border-gray-300 p-4 mb-8 bg-white rounded">
-           <div className="h-[400px] flex justify-center items-center">
-             <span className="text-sm text-gray-400 italic">Zie technische tekening hieronder</span>
-           </div>
-        </div>
-
-        {/* Specificaties Tabel */}
-        <div className="mb-8">
-          <h3 className="text-xl font-bold mb-4">Specificaties</h3>
-          <div className="grid grid-cols-2 gap-4 text-sm mb-6">
-             <div><strong>Breedte:</strong> {maten.totaalBreedte} mm</div>
-             <div><strong>Hoogte:</strong> {maten.totaalHoogte} mm</div>
-             <div><strong>Zijwangen:</strong> {maten.zijpaneelBreedte} mm</div>
-             <div><strong>Boeideel:</strong> {maten.bovenpaneelHoogte} mm</div>
-          </div>
-
-          <table className="w-full text-left text-sm border-collapse">
-            <thead>
-              <tr className="border-b-2 border-gray-800">
-                <th className="py-2">Sectie</th>
-                <th className="py-2">Type</th>
-                <th className="py-2">Afmeting</th>
-                <th className="py-2">Opties</th>
-                <th className="py-2 text-right">Meerprijs</th>
-              </tr>
-            </thead>
-            <tbody>
-              {secties.map((sectie, idx) => {
-                let sectiePrijs = (PRIJZEN.types[sectie.type] || 0);
-                if (sectie.rooster) sectiePrijs += PRIJZEN.opties.rooster;
-                if (sectie.rolluik) sectiePrijs += PRIJZEN.opties.rolluik;
-                if (sectie.hor) sectiePrijs += PRIJZEN.opties.hor;
-                
-                let optiesLijst = [];
-                if (sectie.rooster) optiesLijst.push("Rooster");
-                if (sectie.rolluik) optiesLijst.push("Rolluik");
-                if (sectie.hor) optiesLijst.push("Hor");
-
-                return (
-                  <tr key={idx} className="border-b border-gray-200">
-                    <td className="py-2">Sectie {idx + 1}</td>
-                    <td className="py-2 capitalize">{sectie.type}</td>
-                    <td className="py-2">{sectie.breedte} mm</td>
-                    <td className="py-2">{optiesLijst.join(', ') || '-'}</td>
-                    <td className="py-2 text-right">€ {sectiePrijs.toLocaleString('nl-NL')}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* REGULIERE UI (Verberg tijdens printen) */}
-      <div className="max-w-7xl mx-auto no-print">
-        <header className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Dakkapel Configurator</h1>
-            <p className="text-gray-500">Ontwerp en exporteer technische tekeningen</p>
+      {/* UI HEADER */}
+      <header className="max-w-7xl mx-auto mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200 no-print">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-600 text-white p-2 rounded">
+                <Layout size={24} />
+            </div>
+            <div>
+                <h1 className="text-2xl font-bold text-gray-900">Dakkapel Configurator</h1>
+                <p className="text-xs text-gray-500">Zolderverbouw Larenstein</p>
+            </div>
           </div>
           
           <div className="flex flex-col items-end gap-2">
@@ -567,101 +616,201 @@ export default function DakkapelDesigner() {
                <Euro size={24} /> {totaalPrijs.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="flex gap-2">
-                <button onClick={() => handleDownload('png')} className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 transition-colors">
+                <button onClick={() => handleDownload('png')} className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 transition-colors">
                   <FileImage size={14} /> PNG
                 </button>
-                <button onClick={() => handleDownload('svg')} className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 transition-colors">
-                  <Download size={14} /> SVG
-                </button>
-                <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-medium rounded hover:bg-blue-700 transition-colors shadow-sm">
-                  <Printer size={16} /> Offerte Printen
-                </button>
                 <button onClick={handleDownloadOfferteHTML} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-medium rounded hover:bg-green-700 transition-colors shadow-sm">
-                  <FileText size={16} /> Offerte Downloaden
+                  <FileText size={16} /> Download Offerte
                 </button>
             </div>
           </div>
-        </header>
+      </header>
 
-        <div className="grid grid-cols-12 gap-6">
-          <div className="col-span-5 lg:col-span-4 space-y-6">
-            {!isMaatValid && (
-              <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded shadow-sm">
-                <div className="flex items-center gap-2 text-red-700 font-bold mb-1"><AlertTriangle size={20} /><span>Maatvoering klopt niet!</span></div>
-                <div className="text-sm text-red-600">
-                  <p>Opgegeven totaal: <strong>{maten.totaalBreedte}mm</strong></p>
-                  <p>Berekend: <strong>{berekendeTotaalBreedte}mm</strong></p>
-                  <p className="mt-1 font-semibold">Verschil: {berekendeTotaalBreedte - maten.totaalBreedte}mm</p>
+      <div className="max-w-7xl mx-auto grid grid-cols-12 gap-6 no-print">
+        
+        {/* SIDEBAR TABS */}
+        <div className="col-span-12 lg:col-span-4 flex flex-col gap-4">
+            
+            {/* Tab Navigatie */}
+            <div className="flex bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <button onClick={() => setActiveTab('ontwerp')} className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'ontwerp' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}>
+                    <Layout size={16} /> Ontwerp
+                </button>
+                <button onClick={() => setActiveTab('materialen')} className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'materialen' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}>
+                    <Wrench size={16} /> Materialen
+                </button>
+                <button onClick={() => setActiveTab('gegevens')} className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'gegevens' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}>
+                    <User size={16} /> Gegevens
+                </button>
+            </div>
+
+            {/* TAB CONTENT: ONTWERP */}
+            {activeTab === 'ontwerp' && (
+                <div className="space-y-4 animate-fadeIn">
+                     {!isMaatValid && (
+                        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded shadow-sm">
+                            <div className="flex items-center gap-2 text-red-700 font-bold mb-1"><AlertTriangle size={20} /><span>Maatvoering klopt niet!</span></div>
+                            <div className="text-sm text-red-600">
+                            <p>Totaal opgegeven: {maten.totaalBreedte}mm | Berekend: {berekendeTotaalBreedte}mm</p>
+                            </div>
+                        </div>
+                    )}
+                    
+                    <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
+                        <h2 className="text-sm font-bold text-gray-800 uppercase mb-3 border-b pb-2">Hoofdmaten (mm)</h2>
+                        <div className="grid grid-cols-2 gap-3">
+                            {['totaalBreedte', 'totaalHoogte', 'zijpaneelBreedte', 'bovenpaneelHoogte'].map(key => (
+                            <div key={key}>
+                                <label className="text-xs text-gray-500 block mb-1 capitalize">{key.replace(/([A-Z])/g, ' $1')}</label>
+                                <input type="number" value={maten[key]} onChange={(e) => handleMaatChange(key, e.target.value)} 
+                                    className="w-full p-2 border rounded text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
+                            </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
+                        <div className="flex justify-between items-center mb-3 border-b pb-2">
+                            <h2 className="text-sm font-bold text-gray-800 uppercase">Indeling</h2>
+                            <button onClick={addSectie} className="flex items-center gap-1 text-xs bg-green-100 text-green-800 px-2 py-1 rounded hover:bg-green-200"><Plus size={14} /> Toevoegen</button>
+                        </div>
+                        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                            {secties.map((sectie, idx) => (
+                            <div key={idx} className="bg-gray-50 p-3 rounded border border-gray-200 relative">
+                                <button onClick={() => removeSectie(idx)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
+                                <span className="text-xs font-bold text-gray-400 mb-2 block">SECTIE {idx + 1}</span>
+                                <div className="grid grid-cols-2 gap-2 mb-2">
+                                    <select value={sectie.type} onChange={(e) => handleSectieChange(idx, 'type', e.target.value)} className="w-full p-1.5 text-sm border rounded bg-white">
+                                        <option value="draai">Draairaam</option>
+                                        <option value="kiep">Kiep</option>
+                                        <option value="kiepdraai">Kiep-Draai</option>
+                                        <option value="vast">Vast glas</option>
+                                        <option value="dicht">Paneel</option>
+                                    </select>
+                                    <input type="number" value={sectie.breedte} onChange={(e) => handleSectieChange(idx, 'breedte', parseFloat(e.target.value))} className="w-full p-1.5 text-sm border rounded" placeholder="Breedte" />
+                                </div>
+                                {(sectie.type === 'draai' || sectie.type === 'kiepdraai') && (
+                                     <div className="mb-2">
+                                        <select value={sectie.draairichting} onChange={(e) => handleSectieChange(idx, 'draairichting', e.target.value)} className="w-full p-1.5 text-sm border rounded bg-white">
+                                            <option value="rechts">Rechts draaiend</option>
+                                            <option value="links">Links draaiend</option>
+                                        </select>
+                                    </div>
+                                )}
+                                {sectie.type !== 'dicht' && (
+                                    <div className="flex gap-3 mt-2 pt-2 border-t border-gray-200">
+                                        {['rooster', 'rolluik', 'hor'].map(opt => (
+                                            <label key={opt} className="flex items-center gap-1 cursor-pointer">
+                                                <input type="checkbox" checked={sectie[opt]} onChange={(e) => handleSectieChange(idx, opt, e.target.checked)} className="rounded text-blue-600" />
+                                                <span className="text-xs text-gray-600 capitalize">{opt}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
-              </div>
             )}
 
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-              <h2 className="text-lg font-semibold mb-4 border-b pb-2">Hoofdmaten (mm)</h2>
-              <div className="grid grid-cols-2 gap-4">
-                {['totaalBreedte', 'totaalHoogte', 'zijpaneelBreedte', 'bovenpaneelHoogte', 'overhangLinks', 'overhangRechts'].map(key => (
-                  <div key={key}>
-                    <label className="text-xs font-bold text-gray-500 uppercase">{key.replace(/([A-Z])/g, ' $1').trim()}</label>
-                    <input type="number" value={maten[key]} onChange={(e) => handleMaatChange(key, e.target.value)} 
-                           className={`w-full p-2 border rounded mt-1 focus:ring-2 focus:ring-blue-500 outline-none ${key === 'totaalBreedte' && !isMaatValid ? 'border-red-300 bg-red-50' : 'border-gray-300'}`} />
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* TAB CONTENT: MATERIALEN */}
+            {activeTab === 'materialen' && (
+                <div className="space-y-4 animate-fadeIn">
+                    <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
+                        <h2 className="text-sm font-bold text-gray-800 uppercase mb-3 border-b pb-2">Materialen & Kleuren</h2>
+                        
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 block mb-1">Materiaal & Kleur Kozijn</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <select value={materialData.materiaal} onChange={(e) => handleMaterialChange('materiaal', e.target.value)} className="p-2 border rounded text-sm bg-white">
+                                        <option value="Kunststof">Kunststof</option>
+                                        <option value="Hout">Hout</option>
+                                        <option value="Aluminium">Aluminium</option>
+                                    </select>
+                                    <select value={materialData.kleur} onChange={(e) => handleMaterialChange('kleur', e.target.value)} className="p-2 border rounded text-sm bg-white">
+                                        <option value="Wit">Wit (9016)</option>
+                                        <option value="Creme">Crème (9001)</option>
+                                        <option value="Antraciet">Antraciet (7016)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 block mb-1">Bekleding Zijwangen</label>
+                                <select value={materialData.zijwangen} onChange={(e) => handleMaterialChange('zijwangen', e.target.value)} className="w-full p-2 border rounded text-sm bg-white mb-2">
+                                    <option value="Trespa">Trespa (Standaard)</option>
+                                    <option value="Keralit">Keralit (Meerprijs)</option>
+                                    <option value="Zink">Zink</option>
+                                    <option value="Red Cedar">Red Cedar</option>
+                                </select>
+                                <input type="text" value={materialData.kleurZijwangen} onChange={(e) => handleMaterialChange('kleurZijwangen', e.target.value)} className="w-full p-2 border rounded text-sm" placeholder="Kleur (bijv. RAL 7016)" />
+                            </div>
 
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-              <div className="flex justify-between items-center mb-4 border-b pb-2">
-                <h2 className="text-lg font-semibold">Indeling</h2>
-                <button onClick={addSectie} className="flex items-center gap-1 text-sm bg-green-100 text-green-800 px-3 py-1 rounded hover:bg-green-200 transition-colors"><Plus size={16} /> Toevoegen</button>
-              </div>
-              <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
-                {secties.map((sectie, idx) => (
-                  <div key={idx} className="bg-gray-50 p-4 rounded border border-gray-200 relative group hover:shadow-md transition-shadow">
-                    <div className="absolute top-2 right-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => removeSectie(idx)} className="text-gray-400 hover:text-red-600 p-1" title="Verwijder sectie"><Trash2 size={18} /></button>
-                    </div>
-                    <span className="text-xs font-bold text-gray-400 mb-2 block">SECTIE {idx + 1}</span>
-                    <div className="grid grid-cols-2 gap-3 mb-3">
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Type</label>
-                        <select value={sectie.type} onChange={(e) => handleSectieChange(idx, 'type', e.target.value)} className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-                          <option value="draai">Draairaam</option>
-                          <option value="kiep">Kiep</option>
-                          <option value="kiepdraai">Kiep-Draai</option>
-                          <option value="vast">Vast glas</option>
-                          <option value="dicht">Paneel</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Breedte (mm)</label>
-                        <input type="number" value={sectie.breedte} onChange={(e) => handleSectieChange(idx, 'breedte', parseFloat(e.target.value))} className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 outline-none" />
-                      </div>
-                    </div>
-                    {(sectie.type === 'draai' || sectie.type === 'kiepdraai') && (
-                        <div className="mb-3">
-                             <label className="block text-xs text-gray-500 mb-1">Draairichting</label>
-                             <select value={sectie.draairichting} onChange={(e) => handleSectieChange(idx, 'draairichting', e.target.value)} className="w-full p-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-                                <option value="links">Links draaiend (Scharnier L)</option>
-                                <option value="rechts">Rechts draaiend (Scharnier R)</option>
-                             </select>
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 block mb-1">Dakafwerking</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <select value={materialData.dakbedekking} onChange={(e) => handleMaterialChange('dakbedekking', e.target.value)} className="p-2 border rounded text-sm bg-white">
+                                        <option value="Bitumen">Bitumen</option>
+                                        <option value="EPDM">EPDM</option>
+                                    </select>
+                                     <select value={materialData.daktrim} onChange={(e) => handleMaterialChange('daktrim', e.target.value)} className="p-2 border rounded text-sm bg-white">
+                                        <option value="Aluminium">Alu Trim</option>
+                                        <option value="Kraal">Kraal</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
-                    )}
-                    {sectie.type !== 'dicht' && (
-                        <div className="flex gap-4 border-t pt-3 mt-2">
-                        {['rooster', 'rolluik', 'hor'].map(opt => (
-                            <label key={opt} className="flex items-center gap-2 cursor-pointer select-none">
-                            <input type="checkbox" checked={sectie[opt]} onChange={(e) => handleSectieChange(idx, opt, e.target.checked)} className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" />
-                            <span className="text-xs font-medium capitalize text-gray-600">{opt}</span>
-                            </label>
-                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* TAB CONTENT: GEGEVENS */}
+            {activeTab === 'gegevens' && (
+                <div className="space-y-4 animate-fadeIn">
+                     <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
+                        <h2 className="text-sm font-bold text-gray-800 uppercase mb-3 border-b pb-2">Klantgegevens</h2>
+                        <div className="space-y-2">
+                            <input type="text" placeholder="Naam" value={clientData.naam} onChange={(e) => handleClientChange('naam', e.target.value)} className="w-full p-2 border rounded text-sm" />
+                            <input type="text" placeholder="Straat + Huisnr" value={clientData.straat} onChange={(e) => handleClientChange('straat', e.target.value)} className="w-full p-2 border rounded text-sm" />
+                            <div className="grid grid-cols-3 gap-2">
+                                <input type="text" placeholder="Postcode" value={clientData.postcode} onChange={(e) => handleClientChange('postcode', e.target.value)} className="col-span-1 p-2 border rounded text-sm" />
+                                <input type="text" placeholder="Plaats" value={clientData.plaats} onChange={(e) => handleClientChange('plaats', e.target.value)} className="col-span-2 p-2 border rounded text-sm" />
+                            </div>
+                            <input type="email" placeholder="E-mail" value={clientData.email} onChange={(e) => handleClientChange('email', e.target.value)} className="w-full p-2 border rounded text-sm" />
+                            <input type="text" placeholder="Telefoon" value={clientData.telefoon} onChange={(e) => handleClientChange('telefoon', e.target.value)} className="w-full p-2 border rounded text-sm" />
                         </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="col-span-7 lg:col-span-8">
+                     </div>
+
+                     <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
+                        <h2 className="text-sm font-bold text-gray-800 uppercase mb-3 border-b pb-2">Situatie Checklist</h2>
+                        <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                            {[
+                                {k: 'bouwdepot', l: 'Bouwdepot?'}, 
+                                {k: 'sloopOudeDakkapel', l: 'Sloop oude dakkapel?'},
+                                {k: 'zonnepanelen', l: 'Zonnepanelen aanwezig?'},
+                                {k: 'vergunningNodig', l: 'Vergunning nodig?'},
+                                {k: 'bereikbaarheidKraan', l: 'Kraan bereikbaar?'},
+                                {k: 'grintOpDak', l: 'Grint op dak?'}
+                            ].map((item) => (
+                                <div key={item.k} className="flex justify-between items-center text-sm border-b border-gray-100 pb-1">
+                                    <span className="text-gray-600">{item.l}</span>
+                                    <select value={situationData[item.k]} onChange={(e) => handleSituationChange(item.k, e.target.value)} className="bg-gray-50 border rounded p-1 text-xs">
+                                        <option value="Ja">Ja</option>
+                                        <option value="Nee">Nee</option>
+                                    </select>
+                                </div>
+                            ))}
+                        </div>
+                     </div>
+                </div>
+            )}
+
+        </div>
+
+        {/* VISUALISATIE (MAIN) */}
+        <div className="col-span-12 lg:col-span-8">
             <div className="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-200 sticky top-6">
               <div className="bg-gray-50 px-4 py-3 border-b flex justify-between items-center text-xs text-gray-500 font-mono">
                 <span>PREVIEW MODE: VECTOR</span>
@@ -671,8 +820,8 @@ export default function DakkapelDesigner() {
                 <DakkapelTekening ref={svgRef} maten={maten} secties={secties} berekendeTotaalBreedte={berekendeTotaalBreedte} isValid={isMaatValid} />
               </div>
             </div>
-          </div>
         </div>
+
       </div>
     </div>
   );
